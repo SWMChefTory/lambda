@@ -1,0 +1,61 @@
+name: Nightly yt-dlp refresh
+
+on:
+  workflow_dispatch:
+  schedule:
+    # 매일 03:30 KST = 18:30 UTC (전날)
+    - cron: "30 18 * * *"
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    env:
+      PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+      REGION: ${{ secrets.GCP_REGION }}
+      BASE_IMAGE: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/base/python-ytdlp-deno:nightly
+      APP_IMAGE:  ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/services/lambda-migrated:latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Auth to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY_JSON }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Configure Docker auth for Artifact Registry
+        run: |
+          gcloud auth configure-docker $REGION-docker.pkg.dev --quiet
+
+      - name: Build & push base image (basesetting)
+        run: |
+          gcloud builds submit ./basesetting --tag "$BASE_IMAGE"
+
+      - name: Build & push app image (service)
+        run: |
+          gcloud builds submit ./service --tag "$APP_IMAGE"
+
+      - name: Rollout to Cloud Run services
+        run: |
+          SERVICES="${{ secrets.CLOUDRUN_SERVICES }}"
+          if [ -z "$SERVICES" ]; then
+            SERVICES=$(printf "captionlambda-%s," $(seq 1 13) | sed 's/,$//')
+          fi
+
+          IFS=',' read -ra arr <<< "$SERVICES"
+          for svc in "${arr[@]}"; do
+            echo "== update $svc =="
+            gcloud run services update "$svc" \
+              --region "$REGION" \
+              --image "$APP_IMAGE" \
+              --quiet
+          done
