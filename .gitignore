@@ -28,4 +28,8 @@ dist/
 # Local environment/secrets
 .env
 .env.*
+service/gcp-sa.json
 cookies_out/
+
+*.sh
+*.tsv
