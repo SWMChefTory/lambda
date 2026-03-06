@@ -43,11 +43,11 @@ jobs:
 
       - name: Build & push base image (basesetting)
         run: |
-          gcloud builds submit ./basesetting --tag "$BASE_IMAGE"
+          gcloud builds submit ./basesetting --tag "$BASE_IMAGE" --gcs-source-staging-dir "gs://${PROJECT_ID}_cloudbuild/source"
 
       - name: Build & push app image (service)
         run: |
-          gcloud builds submit ./service --tag "$APP_IMAGE"
+           gcloud builds submit ./service --tag "$APP_IMAGE" --gcs-source-staging-dir "gs://${PROJECT_ID}_cloudbuild/source"
 
       - name: Rollout to Cloud Run services
         run: |
