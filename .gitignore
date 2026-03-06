@@ -29,6 +29,3 @@ dist/
 .env
 .env.*
 cookies_out/
-
-*.sh
-*.tsv
