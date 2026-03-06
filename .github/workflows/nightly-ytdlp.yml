@@ -3,7 +3,6 @@ name: Nightly yt-dlp refresh
 on:
   workflow_dispatch:
   schedule:
-    # 매일 03:30 KST = 18:30 UTC (전날)
     - cron: "30 18 * * *"
 
 jobs:
@@ -12,7 +11,7 @@ jobs:
 
     permissions:
       contents: read
-      id-token: write   # ✅ OIDC(WIF) 로그인에 필요
+      id-token: write
 
     env:
       PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
@@ -24,18 +23,29 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ✅ 키(JSON) 대신 OIDC(WIF)로 인증
       - name: Auth to GCP (WIF)
         uses: google-github-actions/auth@v2
         with:
           token_format: access_token
           workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
           service_account: ${{ secrets.GCP_SA_EMAIL }}
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
 
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2
         with:
           project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Force gcloud project
+        run: |
+          gcloud config set project "$PROJECT_ID"
+          gcloud config get-value project
+
+      - name: Debug context
+        run: |
+          echo "PROJECT_ID=$PROJECT_ID REGION=$REGION"
+          gcloud config list
+          gcloud projects describe "$PROJECT_ID" --format="value(projectId,projectNumber)"
 
       - name: Configure Docker auth for Artifact Registry
         run: |
@@ -47,7 +57,7 @@ jobs:
 
       - name: Build & push app image (service)
         run: |
-           gcloud builds submit ./service --tag "$APP_IMAGE" --gcs-source-staging-dir "gs://${PROJECT_ID}_cloudbuild/source"
+          gcloud builds submit ./service --tag "$APP_IMAGE" --gcs-source-staging-dir "gs://${PROJECT_ID}_cloudbuild/source"
 
       - name: Rollout to Cloud Run services
         run: |
